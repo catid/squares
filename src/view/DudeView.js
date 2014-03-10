@@ -1,9 +1,12 @@
 import animate;
 import ui.View as View;
+import ui.ImageView as ImageView;
 import src.lib.ScoreView as ScoreView;
 
 var TEXT_WIDTH = 16,
-	TEXT_HEIGHT = 20;
+	TEXT_HEIGHT = 20,
+	STAR_WIDTH = 42,
+	STAR_HEIGHT = 39;
 
 exports = Class(View, function(supr)
 {
@@ -49,6 +52,20 @@ exports = Class(View, function(supr)
 			this.oldLives = this.sim.lives;
 			this.livesText.setText(this.sim.lives);
 		}
+	}
+
+	this.addStar = function() {
+		this.starView = new ImageView({
+			parent: this.livesText,
+			x: TEXT_WIDTH - 4,
+			y: TEXT_HEIGHT - 4,
+			anchorX: 0,
+			anchorY: 0,
+			width: STAR_WIDTH / 2,
+			height: STAR_HEIGHT / 2,
+			image: "resources/images/icon_star.png",
+			canHandleEvents: false
+		});
 	}
 });
 

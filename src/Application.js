@@ -5,10 +5,12 @@ import ui.TextView as TextView;
 import src.lib.ViewPool as ViewPool;
 import src.view.BombView as BombView;
 import src.view.DudeView as DudeView;
+import Sound;
 
 var UI_HEIGHT = 1024,
 	UI_WIDTH = UI_HEIGHT / device.width * device.height,
-	UI_SCALE = device.height / UI_HEIGHT;
+	UI_SCALE = device.height / UI_HEIGHT,
+	DRAG_DISTANCE = UI_SCALE * 14;
 
 var BG_WIDTH = 576,
 	BG_HEIGHT = 1024,
@@ -31,6 +33,20 @@ var BG_WIDTH = 576,
 	ACTIVITY_TIMEOUT = 1000;
 
 exports = Class(GC.Application, function () {
+	this.music = new Sound({
+		path: 'resources/sounds/music',
+		files: {
+			'win': { volume: 0.67, background: true }
+		}
+	});
+	this.sfx = new Sound({
+		path: 'resources/sounds/sfx',
+		files: {
+			'sfx_birdie_hurt': { volume: 1 },
+			'sfx_cannon_b': { volume: 1 }
+		}
+	});
+
 	/*
 	 * Bombs:
 	 *
@@ -276,23 +292,49 @@ exports = Class(GC.Application, function () {
 			}
 		}
 
+		var delay = 0;
+
 		if (this.me) {
 			var sim = this.me.sim;
 
-			var netsim = this.netSim;
-			netsim.size = sim.size;
-			netsim.x = sim.x;
-			netsim.y = sim.y;
-			netsim.tx = sim.tx;
-			netsim.ty = sim.ty;
-			netsim.vx = sim.vx;
-			netsim.vy = sim.vy;
-			netsim.dead = sim.dead;
-			netsim.protection = sim.protection;
-			netsim.lives = sim.lives;
+			/*
+			 * Somewhere between once every 200 ms and once every frame
+			 */
 
-			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify(netsim));
+			var dist = Math.abs(this.lastTX - sim.tx) + Math.abs(this.lastTY - sim.ty);
+
+			var delay = 200 - dist * 4;
+			if (delay < 24) {
+				delay = 24;
+			}
+
+			this.lastTX = sim.tx;
+			this.lastTY = sim.ty;
+
+			this.sendPosition(delay);
 		}
+	}
+
+	this.sendPosition = function(delay) {
+		if (!this.me) {
+			return;
+		}
+
+		var now = +new Date();
+
+		if ((now - this.lastPST) < delay) {
+			return;
+		}
+
+		var sim = this.me.sim;
+
+		NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+			1, this.myIdent, this.myColor, sim.size, sim.x, sim.y,
+			sim.tx, sim.ty, sim.vx, sim.vy, sim.dead, sim.protection,
+			sim.lives
+		]));
+
+		this.lastPST = now;
 	}
 
 	this.placeDude = function() {
@@ -314,6 +356,8 @@ exports = Class(GC.Application, function () {
 		sim.protection = PROTECTION_TICKS;
 
 		this.me.updateLives();
+
+		GC.app.music.play('win');
 	}
 
 	this.onCounterTick = function() {
@@ -326,17 +370,25 @@ exports = Class(GC.Application, function () {
 		}
 	}
 
+	this.onDie = function() {
+		this.countText.style.visible = true;
+		this.count = 9;
+		this.countText.setText(this.count);
+
+		GC.app.music.stop('win');
+
+		setTimeout(bind(this, this.onCounterTick), 1000);
+	}
+
 	this.onHitMe = function(ident) {
 		var sim = this.me.sim;
+
+		GC.app.sfx.play('sfx_birdie_hurt');
 
 		if (--sim.lives <= 0) {
 			sim.dead = ident;
 
-			this.countText.style.visible = true;
-			this.count = 9;
-			this.countText.setText(this.count);
-
-			setTimeout(bind(this, this.onCounterTick), 1000);
+			this.onDie();
 		}
 
 		this.me.updateLives();
@@ -381,29 +433,31 @@ exports = Class(GC.Application, function () {
 
 		this.bombs.push(view);
 
-		NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify({
-			"type": "bomb",
-			"color": this.myBombColor,
-			"ident": this.myIdent,
-			"x": sim.x,
-			"y": sim.y,
-			"vx": vx,
-			"vy": vy
-		}));
+		NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+			0, this.myIdent, Math.floor(sim.x), Math.floor(sim.y),
+			vx, vy
+		]));
+
+		GC.app.sfx.play('sfx_cannon_b');
 	}
 
 	this.initInput = function(view) {
 		this.gameContainer.onInputStart = bind(this, function(evt, pt) {
+/* Old system
 			// First touch is movement
 			if (this.activeTouch === undefined) {
 				this.activeTouch = evt.id;
 				this.onPlayerMove(pt.x, pt.y);
 			}
-
 			this.touchHistory[evt.id] = pt;
+*/
+			this.touchHistory[evt.id] = {
+				start: pt
+			};
 		});
 
 		this.gameContainer.onInputMove = bind(this, function(evt, pt) {
+/* Old system
 			// If movement touch,
 			if (this.activeTouch === undefined || evt.id === this.activeTouch) {
 				this.activeTouch = evt.id;
@@ -418,9 +472,24 @@ exports = Class(GC.Application, function () {
 					 this.onPlayerMove(pt.x, pt.y);
 				}
 			}
+*/
+			var touch = this.touchHistory[evt.id];
+			if (touch) {
+				if (touch.isMovement) {
+					 this.onPlayerMove(pt.x, pt.y);
+				} else {
+					if (Math.abs(pt.x - touch.start.x) > DRAG_DISTANCE ||
+						Math.abs(pt.y - touch.start.y) > DRAG_DISTANCE)
+					{
+						touch.isMovement = true;
+						this.onPlayerMove(pt.x, pt.y);
+					}
+				}
+			}
 		});
 
 		this.gameContainer.onInputSelect = bind(this, function(evt, pt) {
+/* Old system
 			// If movement touch is done,
 			if (evt.id === this.activeTouch) {
 				this.onPlayerMove(pt.x, pt.y);
@@ -431,10 +500,23 @@ exports = Class(GC.Application, function () {
 			}
 
 			this.touchHistory[evt.id] = null;
+*/
+			var touch = this.touchHistory[evt.id];
+			if (touch) {
+				if (!touch.isMovement) {
+					this.onPlayerFire(pt.x, pt.y);
+				} else {
+					this.onPlayerMove(pt.x, pt.y);
+				}
+
+				this.touchHistory[evt.id] = null;
+			}
 		});
 	}
 
 	this.initUI = function () {
+		GC.app.music.play('win');
+
 		device.stayAwake(true);
 
 		this.mainContainer = new View({
@@ -574,6 +656,10 @@ exports = Class(GC.Application, function () {
 		this.myBombColor = "rgb(" + br + "," + bg + "," + bb + ")";
 		this.myIdent = Math.floor(Math.random() * 1000000) + 1;
 
+		this.lastPST = 0; // Last position send time
+		this.lastTX = 0; // Last tx
+		this.lastTY = 0; // Last ty
+
 		this.netSim = {
 			type: "dude",
 			x: BG_WIDTH/2,
@@ -587,6 +673,7 @@ exports = Class(GC.Application, function () {
 
 		this.me = this.getDudeView(this.netSim);
 		this.me.updateLives();
+		this.me.addStar();
 
 		this.dudes.push(this.me);
 		this.dudesByIdent[this.myIdent] = this.me;
@@ -608,41 +695,64 @@ exports = Class(GC.Application, function () {
 		this.placeDude();
 	}
 
-	this.onServerData = function(obj, dt) {
-		if (obj.type == "dude") {
-			var dude = this.dudesByIdent[obj.ident];
+	this.onServerData = function(obj, dt, ts) {
+		if (obj[0] == 1) {
+			var ident = obj[1];
+			var color = obj[2];
+			var size = obj[3];
+			var x = obj[4];
+			var y = obj[5];
+			var tx = obj[6];
+			var ty = obj[7];
+			var vx = obj[8];
+			var vy = obj[9];
+			var dead = obj[10];
+			var protection = obj[11];
+			var lives = obj[12];
+
+			var dude = this.dudesByIdent[obj[1]];
+
 			if (!dude) {
 				dude = this.getDudeView({
-					x: obj.x,
-					y: obj.y,
-					size: obj.size,
-					color: obj.color,
-					ident: obj.ident
+					x: x,
+					y: y,
+					size: size,
+					color: color,
+					ident: ident,
+					ts: ts
 				});
 
-				this.dudesByIdent[obj.ident] = dude;
+				this.dudesByIdent[ident] = dude;
 				this.dudes.push(dude);
 			}
 
 			var sim = dude.sim;
-			sim.x = obj.x;
-			sim.y = obj.y;
-			sim.tx = obj.tx;
-			sim.ty = obj.ty;
-			sim.vx = obj.vx;
-			sim.vy = obj.vy;
-			sim.size = obj.size;
-			sim.protection = obj.protection;
-			sim.lives = obj.lives;
+
+			if (ts - sim.ts < -1) {
+				logger.log("OUT OF ORDER", ts, sim.ts);
+				return;
+			}
+
+			sim.activity = ACTIVITY_TIMEOUT;
+			sim.x = x;
+			sim.y = y;
+			sim.tx = tx;
+			sim.ty = ty;
+			sim.vx = vx;
+			sim.vy = vy;
+			sim.size = size;
+			sim.protection = protection;
+			sim.lives = lives;
+			sim.ts = ts;
 
 			dude.updateLives();
 
-			if (obj.dead) {
+			if (dead) {
 				if (sim.dead !== true) {
 					sim.dead = true;
 
 					var mysim = this.me.sim;
-					if (obj.dead == mysim.ident) {
+					if (dead == mysim.ident) {
 						mysim.size += WIN_GROW_RATE;
 						this.me.updateLives();
 					}
@@ -650,27 +760,36 @@ exports = Class(GC.Application, function () {
 			} else {
 				sim.dead = false;
 			}
-
-			sim.activity = ACTIVITY_TIMEOUT;
-
-			if (dt < 1000) {
-				this.tickDude(dude, dt);
+/*
+			if (!this.dtlog) {
+				this.dtlog = [];
 			}
-		} else if (obj.type == "bomb") {
+			this.dtlog.push(dt);
+			if (this.dtlog.length > 10) {
+				logger.log(this.dtlog);
+				this.dtlog.length = 0;
+			}
+*/
+			if (dt < 1000) {
+				this.tickDude(dude, dt + 2); // Add 2 ms for JS processing
+			}
+		} else if (obj[0] == 0) {
 			var view = this.getBombView({
-				x: obj.x,
-				y: obj.y,
-				vx: obj.vx,
-				vy: obj.vy,
-				color: obj.color,
-				ident: obj.ident
+				x: obj[2],
+				y: obj[3],
+				vx: obj[4],
+				vy: obj[5],
+				color: "rgb(255, 100, 100)",
+				ident: obj[1]
 			});
 
 			this.bombs.push(view);
 
 			if (dt < 1000) {
-				this.tickBomb(dude, dt);
+				this.tickBomb(view, dt);
 			}
+
+			GC.app.sfx.play('sfx_cannon_b');
 		}
 	}
 });
