@@ -90,11 +90,13 @@ exports = Class(GC.Application, function () {
 		return view;
 	};
 
-	this.tickDude = function(view) {
+	this.tickDude = function(view, dt) {
 		var sim = view.sim;
+		var frames = dt / 10;
 
 		if (view != this.me) {
-			if (--sim.activity <= 0) {
+			sim.activity -= frames;
+			if (sim.activity <= 0) {
 				var ii = this.dudes.indexOf(view);
 				if (ii >= 0) {
 					delete this.dudesByIdent[sim.ident];
@@ -126,7 +128,8 @@ exports = Class(GC.Application, function () {
 		}
 
 		if (sim.protection) {
-			if (--sim.protection > 0) {
+			sim.protection -= frames;
+			if (sim.protection > 0) {
 				view.style.backgroundColor = "white";
 				sim.whited = true;
 			} else {
@@ -151,10 +154,10 @@ exports = Class(GC.Application, function () {
 			var ty = sim.ty;
 
 			if (sim.vx) {
-				sim.x += sim.vx / 2;
+				sim.x += sim.vx * frames / 2;
 			}
 			if (sim.vy) {
-				sim.y += sim.vy / 2;
+				sim.y += sim.vy * frames / 2;
 			}
 
 			var dx = tx - sim.x;
@@ -163,8 +166,8 @@ exports = Class(GC.Application, function () {
 			dx *= DUDE_ACC / dm;
 			dy *= DUDE_ACC / dm;
 
-			sim.vx += dx;
-			sim.vy += dy;
+			sim.vx += dx * frames;
+			sim.vy += dy * frames;
 
 			var vm = Math.sqrt(sim.vx * sim.vx + sim.vy * sim.vy);
 			if (vm > DUDE_VEL) {
@@ -174,10 +177,10 @@ exports = Class(GC.Application, function () {
 			}
 
 			if (sim.vx) {
-				sim.x += sim.vx / 2;
+				sim.x += sim.vx * frames / 2;
 			}
 			if (sim.vy) {
-				sim.y += sim.vy / 2;
+				sim.y += sim.vy * frames / 2;
 			}
 
 			if (sim.x < 0) {
@@ -196,11 +199,12 @@ exports = Class(GC.Application, function () {
 		return true;
 	}
 
-	this.tickBomb = function(view) {
+	this.tickBomb = function(view, dt) {
 		var sim = view.sim;
+		var frames = dt / 10;
 
-		sim.x += sim.vx;
-		sim.y += sim.vy;
+		sim.x += sim.vx * frames;
+		sim.y += sim.vy * frames;
 
 		if (sim.x < 0 || sim.x > BG_WIDTH ||
 			sim.y < 0 || sim.y > BG_HEIGHT)
@@ -238,34 +242,37 @@ exports = Class(GC.Application, function () {
 		return true;
 	}
 
-	this.tickFraction = 0;
-
 	this.tick = function(dt) {
-		dt += this.tickFraction;
+		for (var ii = 0; ii < this.dudes.length; ii++) {
+			var view = this.dudes[ii];
 
-		while (dt >= 10) {
-			dt -= 10;
+			var ox = view.sim.x, oy = view.sim.y;
 
-			for (var ii = 0; ii < this.dudes.length; ii++) {
-				var view = this.dudes[ii];
+			if (!this.tickDude(view, dt)) {
+				--ii;
+			} else {
+				var ticks = Math.floor(dt / 10);
+				var x = view.sim.x, y = view.sim.y;
 
-				if (!this.tickDude(view)) {
-					--ii;
-				} else {
-					view.style.x = view.sim.x - view.sim.size/2;
-					view.style.y = view.sim.y - view.sim.size/2;
+				while (ticks > 0) {
+					x = (x + ox) / 2;
+					y = (y + oy) / 2;
+					ticks--;
 				}
+
+				view.style.x = x - view.sim.size/2;
+				view.style.y = y - view.sim.size/2;
 			}
+		}
 
-			for (var ii = 0; ii < this.bombs.length; ii++) {
-				var view = this.bombs[ii];
+		for (var ii = 0; ii < this.bombs.length; ii++) {
+			var view = this.bombs[ii];
 
-				if (!this.tickBomb(view)) {
-					--ii;
-				} else {
-					view.style.x = view.sim.x - BOMB_SIZE/2;
-					view.style.y = view.sim.y - BOMB_SIZE/2;
-				}
+			if (!this.tickBomb(view, dt)) {
+				--ii;
+			} else {
+				view.style.x = view.sim.x - BOMB_SIZE/2;
+				view.style.y = view.sim.y - BOMB_SIZE/2;
 			}
 		}
 
@@ -286,8 +293,6 @@ exports = Class(GC.Application, function () {
 
 			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify(netsim));
 		}
-
-		this.tickFraction = dt;
 	}
 
 	this.placeDude = function() {
@@ -587,13 +592,13 @@ exports = Class(GC.Application, function () {
 		this.dudesByIdent[this.myIdent] = this.me;
 
 		if (NATIVE.xhr) {
-			NATIVE.xhr.udpOnRead = bind(this, function(data) {
-				//logger.log("UDP DATA", data);
+			NATIVE.xhr.udpOnRead = bind(this, function(data, dt) {
+				//logger.log("UDP DATA", data, dt);
 
 				try {
 					var obj = JSON.parse(data);
 
-					this.onServerData(obj);
+					this.onServerData(obj, dt);
 				} catch(e) {
 					logger.log("Error in UDP data:", e);
 				}
@@ -603,7 +608,7 @@ exports = Class(GC.Application, function () {
 		this.placeDude();
 	}
 
-	this.onServerData = function(obj) {
+	this.onServerData = function(obj, dt) {
 		if (obj.type == "dude") {
 			var dude = this.dudesByIdent[obj.ident];
 			if (!dude) {
@@ -647,6 +652,10 @@ exports = Class(GC.Application, function () {
 			}
 
 			sim.activity = ACTIVITY_TIMEOUT;
+
+			if (dt < 1000) {
+				this.tickDude(dude, dt);
+			}
 		} else if (obj.type == "bomb") {
 			var view = this.getBombView({
 				x: obj.x,
@@ -658,6 +667,10 @@ exports = Class(GC.Application, function () {
 			});
 
 			this.bombs.push(view);
+
+			if (dt < 1000) {
+				this.tickBomb(dude, dt);
+			}
 		}
 	}
 });
