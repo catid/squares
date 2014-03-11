@@ -5,6 +5,7 @@ import ui.TextView as TextView;
 import src.lib.ViewPool as ViewPool;
 import src.view.BombView as BombView;
 import src.view.DudeView as DudeView;
+import src.view.OptionOverlay as OptionOverlay;
 import Sound;
 
 var UI_HEIGHT = 1024,
@@ -31,6 +32,16 @@ var BG_WIDTH = 576,
 	TEXT_HEIGHT = 80,
 	PROTECTION_TICKS = 300,
 	ACTIVITY_TIMEOUT = 1000;
+
+var FAKE_LOSS = 0;
+
+function IsFakeLoss() {
+	if (Math.random() < FAKE_LOSS) {
+		return true;
+	} else {
+		return false;
+	}
+}
 
 exports = Class(GC.Application, function () {
 	this.music = new Sound({
@@ -166,7 +177,7 @@ exports = Class(GC.Application, function () {
 		}
 
 		var tx = sim.tx;
-		if (tx !== undefined) {
+		if (tx != -1) {
 			var ty = sim.ty;
 
 			if (sim.vx) {
@@ -258,38 +269,54 @@ exports = Class(GC.Application, function () {
 		return true;
 	}
 
+	this.splitTick = function(dt, fn) {
+		var ft = dt;
+		while (ft >= 30) {
+			if (!fn(30)) {
+				return false;
+			}
+			ft -= 30;
+		}
+		return fn(ft);
+	}
+
 	this.tick = function(dt) {
 		for (var ii = 0; ii < this.dudes.length; ii++) {
 			var view = this.dudes[ii];
 
-			var ox = view.sim.x, oy = view.sim.y;
-
-			if (!this.tickDude(view, dt)) {
-				--ii;
-			} else {
-				var ticks = Math.floor(dt / 10);
-				var x = view.sim.x, y = view.sim.y;
-
-				while (ticks > 0) {
-					x = (x + ox) / 2;
-					y = (y + oy) / 2;
-					ticks--;
+			this.splitTick(dt, bind(this, function(rate) {
+				if (!this.tickDude(view, rate)) {
+					--ii;
+					return false;
 				}
 
-				view.style.x = x - view.sim.size/2;
-				view.style.y = y - view.sim.size/2;
-			}
+				return true;
+			}));
+
+			var ox = view.sim.ox, oy = view.sim.oy;
+			ox = (ox * 7 + view.sim.x) / 8;
+			oy = (oy * 7 + view.sim.y) / 8;
+
+			view.style.x = ox - view.sim.size/2;
+			view.style.y = oy - view.sim.size/2;
+
+			view.sim.ox = ox;
+			view.sim.oy = oy;
 		}
 
 		for (var ii = 0; ii < this.bombs.length; ii++) {
 			var view = this.bombs[ii];
 
-			if (!this.tickBomb(view, dt)) {
-				--ii;
-			} else {
-				view.style.x = view.sim.x - BOMB_SIZE/2;
-				view.style.y = view.sim.y - BOMB_SIZE/2;
-			}
+			this.splitTick(dt, bind(this, function(rate) {
+				if (!this.tickBomb(view, rate)) {
+					--ii;
+					return false;
+				}
+				return true;
+			}));
+
+			view.style.x = view.sim.x - BOMB_SIZE/2;
+			view.style.y = view.sim.y - BOMB_SIZE/2;
 		}
 
 		var delay = 0;
@@ -301,7 +328,12 @@ exports = Class(GC.Application, function () {
 			 * Somewhere between once every 200 ms and once every frame
 			 */
 
-			var dist = Math.abs(this.lastTX - sim.tx) + Math.abs(this.lastTY - sim.ty);
+			var dist;
+			if (sim.tx != -1) {
+				dist = Math.abs(this.lastTX - sim.tx) + Math.abs(this.lastTY - sim.ty);
+			} else {
+				dist = 0;
+			}
 
 			var delay = 200 - dist * 4;
 			if (delay < 24) {
@@ -328,11 +360,13 @@ exports = Class(GC.Application, function () {
 
 		var sim = this.me.sim;
 
-		NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-			1, this.myIdent, this.myColor, sim.size, sim.x, sim.y,
-			sim.tx, sim.ty, sim.vx, sim.vy, sim.dead, sim.protection,
-			sim.lives
-		]));
+		if (!IsFakeLoss()) {
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+				1, this.myIdent, this.myColor, sim.size, sim.x, sim.y,
+				sim.tx, sim.ty, sim.vx, sim.vy, sim.dead, sim.protection,
+				sim.lives
+			]));
+		}
 
 		this.lastPST = now;
 	}
@@ -347,11 +381,11 @@ exports = Class(GC.Application, function () {
 
 		sim.x = Math.floor(Math.random() * BG_WIDTH);
 		sim.y = Math.floor(Math.random() * BG_HEIGHT);
-		sim.tx = undefined;
-		sim.ty = undefined;
+		sim.tx = -1;
+		sim.ty = -1;
 		sim.vx = 0;
 		sim.vy = 0;
-		sim.oldSize = undefined;
+		sim.oldSize = -1;
 		sim.size = DUDE_SIZE;
 		sim.protection = PROTECTION_TICKS;
 
@@ -433,10 +467,12 @@ exports = Class(GC.Application, function () {
 
 		this.bombs.push(view);
 
-		NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-			0, this.myIdent, Math.floor(sim.x), Math.floor(sim.y),
-			vx, vy
-		]));
+		if (!IsFakeLoss()) {
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+				0, this.myIdent, Math.floor(sim.x), Math.floor(sim.y),
+				vx, vy
+			]));
+		}
 
 		GC.app.sfx.play('sfx_cannon_b');
 	}
@@ -514,10 +550,22 @@ exports = Class(GC.Application, function () {
 		});
 	}
 
-	this.initUI = function () {
+	this.onBack = function() {
+		logger.log("BACK PRESSED");
+
+		this.optionsOverlay.show();
+	}
+
+	this.initUI = function() {
 		GC.app.music.play('win');
 
 		device.stayAwake(true);
+
+		if (NATIVE.backButton) {
+			NATIVE.backButton.subscribe('pressed', this, function() {
+				this.onBack();
+			});
+		}
 
 		this.mainContainer = new View({
 			parent: this,
@@ -542,6 +590,60 @@ exports = Class(GC.Application, function () {
 		});
 
 		this.initInput(this.gameContainer);
+
+		this.optionsOverlay = new OptionOverlay({
+			superview: this.gameContainer,
+			parent: this.gameContainer
+		});
+
+		this.optionsOverlay.on('ploss10', bind(this, function() {
+			logger.log("Ploss10");
+			FAKE_LOSS = 0.1;
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+					2, FAKE_LOSS
+			]));
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+					2, FAKE_LOSS
+			]));
+		}));
+		this.optionsOverlay.on('ploss20', bind(this, function() {
+			logger.log("Ploss20");
+			FAKE_LOSS = 0.2;
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+					2, FAKE_LOSS
+			]));
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+					2, FAKE_LOSS
+			]));
+		}));
+		this.optionsOverlay.on('plossOff', bind(this, function() {
+			logger.log("PlossOff");
+			FAKE_LOSS = 0;
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+					2, FAKE_LOSS
+			]));
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+					2, FAKE_LOSS
+			]));
+		}));
+		this.optionsOverlay.on('erasureOff', bind(this, function() {
+			logger.log("ErasureOff");
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+					3, 0
+			]));
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+					3, 0
+			]));
+		}));
+		this.optionsOverlay.on('erasureOn', bind(this, function() {
+			logger.log("ErasureOn");
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+					3, 1
+			]));
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+					3, 1
+			]));
+		}));
 
 		this.dudeContainer = new View({
 			parent: this.gameContainer,
@@ -666,6 +768,8 @@ exports = Class(GC.Application, function () {
 			y: BG_HEIGHT/2,
 			vx: 0,
 			vy: 0,
+			ox: 0,
+			oy: 0,
 			size: DUDE_SIZE,
 			color: this.myColor,
 			ident: this.myIdent
@@ -683,9 +787,11 @@ exports = Class(GC.Application, function () {
 				//logger.log("UDP DATA", data, dt);
 
 				try {
-					var obj = JSON.parse(data);
+					if (!IsFakeLoss()) {
+						var obj = JSON.parse(data);
 
-					this.onServerData(obj, dt);
+						this.onServerData(obj, dt);
+					}
 				} catch(e) {
 					logger.log("Error in UDP data:", e);
 				}
@@ -716,6 +822,8 @@ exports = Class(GC.Application, function () {
 				dude = this.getDudeView({
 					x: x,
 					y: y,
+					ox: x,
+					oy: y,
 					size: size,
 					color: color,
 					ident: ident,
@@ -790,6 +898,15 @@ exports = Class(GC.Application, function () {
 			}
 
 			GC.app.sfx.play('sfx_cannon_b');
+		} else if (obj[0] == 2) {
+			FAKE_LOSS = obj[1];
+			logger.log("Fake loss set to", FAKE_LOSS);
+		} else if (obj[0] == 3) {
+			if (obj[1] == 1) {
+				logger.log("Erasure codes toggled ON");
+			} else {
+				logger.log("Erasure codes toggled off");
+			}
 		}
 	}
 });
