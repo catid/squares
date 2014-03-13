@@ -33,16 +33,6 @@ var BG_WIDTH = 576,
 	PROTECTION_TICKS = 300,
 	ACTIVITY_TIMEOUT = 1000;
 
-var FAKE_LOSS = 0;
-
-function IsFakeLoss() {
-	if (Math.random() < FAKE_LOSS) {
-		return true;
-	} else {
-		return false;
-	}
-}
-
 exports = Class(GC.Application, function () {
 	this.music = new Sound({
 		path: 'resources/sounds/music',
@@ -360,13 +350,11 @@ exports = Class(GC.Application, function () {
 
 		var sim = this.me.sim;
 
-		if (!IsFakeLoss()) {
-			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-				1, this.myIdent, this.myColor, sim.size, sim.x, sim.y,
-				sim.tx, sim.ty, sim.vx, sim.vy, sim.dead, sim.protection,
-				sim.lives
-			]));
-		}
+		NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+			1, this.myIdent, this.myColor, sim.size, sim.x, sim.y,
+			sim.tx, sim.ty, sim.vx, sim.vy, sim.dead, sim.protection,
+			sim.lives
+		]));
 
 		this.lastPST = now;
 	}
@@ -467,12 +455,10 @@ exports = Class(GC.Application, function () {
 
 		this.bombs.push(view);
 
-		if (!IsFakeLoss()) {
-			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-				0, this.myIdent, Math.floor(sim.x), Math.floor(sim.y),
-				vx, vy
-			]));
-		}
+		NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable(JSON.stringify([
+			0, this.myIdent, Math.floor(sim.x), Math.floor(sim.y),
+			vx, vy
+		]));
 
 		GC.app.sfx.play('sfx_cannon_b');
 	}
@@ -787,13 +773,11 @@ exports = Class(GC.Application, function () {
 				//logger.log("UDP DATA", data, dt);
 
 				try {
-					if (!IsFakeLoss()) {
-						var obj = JSON.parse(data);
+					var obj = JSON.parse(data);
 
-						this.onServerData(obj, dt);
-					}
+					this.onServerData(obj, dt);
 				} catch(e) {
-					logger.log("Error in UDP data:", e);
+					logger.log("Error in UDP data:", e, data);
 				}
 			});
 		}
