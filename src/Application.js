@@ -607,12 +607,14 @@ exports = Class(GC.Application, function () {
 		}));
 		this.optionsOverlay.on('erasureOff', bind(this, function() {
 			logger.log("ErasureOff");
+			this.UseMoreReliable = false;
 			NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable(JSON.stringify([
 					2, 0
 			]));
 		}));
 		this.optionsOverlay.on('erasureOn', bind(this, function() {
 			logger.log("ErasureOn");
+			this.UseMoreReliable = true;
 			NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable(JSON.stringify([
 					2, 1
 			]));
