@@ -869,8 +869,8 @@ exports = Class(GC.Application, function () {
 
 			this.bombs.push(view);
 
-			if (dt < 1000) {
-				this.tickBomb(view, dt);
+			if (dt < 2000) {
+				this.tickBomb(view, dt + 2);
 			}
 
 			GC.app.sfx.play('sfx_cannon_b');
