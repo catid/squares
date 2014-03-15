@@ -186,6 +186,12 @@ exports = Class(GC.Application, function () {
 			sim.vx += dx * frames;
 			sim.vy += dy * frames;
 
+			if (dm < 50) {
+				var scale = dm / 50;
+				sim.vx *= scale;
+				sim.vy *= scale;
+			}
+
 			var vm = Math.sqrt(sim.vx * sim.vx + sim.vy * sim.vy);
 			if (vm > DUDE_VEL) {
 				var scale = DUDE_VEL / vm;
@@ -514,6 +520,8 @@ exports = Class(GC.Application, function () {
 						this.onPlayerMove(pt.x, pt.y);
 					}
 				}
+			} else {
+				 this.onPlayerMove(pt.x, pt.y);
 			}
 		});
 
@@ -539,6 +547,8 @@ exports = Class(GC.Application, function () {
 				}
 
 				this.touchHistory[evt.id] = null;
+			} else {
+				this.onPlayerFire(pt.x, pt.y);
 			}
 		});
 	}
