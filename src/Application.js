@@ -360,7 +360,7 @@ exports = Class(GC.Application, function () {
 			1, this.myIdent, this.myColor, sim.size, sim.x, sim.y,
 			sim.tx, sim.ty, sim.vx, sim.vy, sim.dead, sim.protection,
 			sim.lives
-		]));
+		]), false);
 
 		this.lastPST = now;
 	}
@@ -461,17 +461,10 @@ exports = Class(GC.Application, function () {
 
 		this.bombs.push(view);
 
-		if (this.UseMoreReliable) {
-			NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable(JSON.stringify([
-						0, this.myIdent, Math.floor(sim.x), Math.floor(sim.y),
-						vx, vy
-						]));
-		} else {
-			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-						0, this.myIdent, Math.floor(sim.x), Math.floor(sim.y),
-						vx, vy
-						]));
-		}
+		NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+				0, this.myIdent, Math.floor(sim.x), Math.floor(sim.y),
+				vx, vy
+		]), this.UseMoreReliable);
 
 		GC.app.sfx.play('sfx_cannon_b');
 	}
@@ -605,29 +598,29 @@ exports = Class(GC.Application, function () {
 
 		this.optionsOverlay.on('ploss10', bind(this, function() {
 			logger.log("Ploss10");
-			NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable("CMD PLOSS " + 10);
+			NATIVE.xhr && NATIVE.xhr.udpSend("CMD PLOSS " + 10, true);
 		}));
 		this.optionsOverlay.on('ploss20', bind(this, function() {
 			logger.log("Ploss20");
-			NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable("CMD PLOSS " + 20);
+			NATIVE.xhr && NATIVE.xhr.udpSend("CMD PLOSS " + 20, true);
 		}));
 		this.optionsOverlay.on('plossOff', bind(this, function() {
 			logger.log("PlossOff");
-			NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable("CMD PLOSS " + 0);
+			NATIVE.xhr && NATIVE.xhr.udpSend("CMD PLOSS " + 0, true);
 		}));
 		this.optionsOverlay.on('erasureOff', bind(this, function() {
 			logger.log("ErasureOff");
 			this.UseMoreReliable = false;
-			NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable(JSON.stringify([
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
 					2, 0
-			]));
+			]), true);
 		}));
 		this.optionsOverlay.on('erasureOn', bind(this, function() {
 			logger.log("ErasureOn");
 			this.UseMoreReliable = true;
-			NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable(JSON.stringify([
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
 					2, 1
-			]));
+			]), true);
 		}));
 
 		this.dudeContainer = new View({
