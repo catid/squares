@@ -854,7 +854,7 @@ exports = Class(GC.Application, function () {
 				this.dtlog.length = 0;
 			}
 */
-			if (dt < 1000) {
+			if (dt < 2000) {
 				this.tickDude(dude, dt + 2); // Add 2 ms for JS processing
 			}
 		} else if (obj[0] == 0) {
