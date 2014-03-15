@@ -455,10 +455,17 @@ exports = Class(GC.Application, function () {
 
 		this.bombs.push(view);
 
-		NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable(JSON.stringify([
-			0, this.myIdent, Math.floor(sim.x), Math.floor(sim.y),
-			vx, vy
-		]));
+		if (this.UseMoreReliable) {
+			NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable(JSON.stringify([
+						0, this.myIdent, Math.floor(sim.x), Math.floor(sim.y),
+						vx, vy
+						]));
+		} else {
+			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
+						0, this.myIdent, Math.floor(sim.x), Math.floor(sim.y),
+						vx, vy
+						]));
+		}
 
 		GC.app.sfx.play('sfx_cannon_b');
 	}
@@ -543,6 +550,10 @@ exports = Class(GC.Application, function () {
 	}
 
 	this.initUI = function() {
+		this.UseMoreReliable = true;
+
+		NATIVE.xhr && NATIVE.xhr.udpInit("173.230.158.98", 5000);
+
 		GC.app.music.play('win');
 
 		device.stayAwake(true);
@@ -584,50 +595,26 @@ exports = Class(GC.Application, function () {
 
 		this.optionsOverlay.on('ploss10', bind(this, function() {
 			logger.log("Ploss10");
-			FAKE_LOSS = 0.1;
-			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-					2, FAKE_LOSS
-			]));
-			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-					2, FAKE_LOSS
-			]));
+			NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable("CMD PLOSS " + 10);
 		}));
 		this.optionsOverlay.on('ploss20', bind(this, function() {
 			logger.log("Ploss20");
-			FAKE_LOSS = 0.2;
-			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-					2, FAKE_LOSS
-			]));
-			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-					2, FAKE_LOSS
-			]));
+			NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable("CMD PLOSS " + 20);
 		}));
 		this.optionsOverlay.on('plossOff', bind(this, function() {
 			logger.log("PlossOff");
-			FAKE_LOSS = 0;
-			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-					2, FAKE_LOSS
-			]));
-			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-					2, FAKE_LOSS
-			]));
+			NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable("CMD PLOSS " + 0);
 		}));
 		this.optionsOverlay.on('erasureOff', bind(this, function() {
 			logger.log("ErasureOff");
-			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-					3, 0
-			]));
-			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-					3, 0
+			NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable(JSON.stringify([
+					2, 0
 			]));
 		}));
 		this.optionsOverlay.on('erasureOn', bind(this, function() {
 			logger.log("ErasureOn");
-			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-					3, 1
-			]));
-			NATIVE.xhr && NATIVE.xhr.udpSend(JSON.stringify([
-					3, 1
+			NATIVE.xhr && NATIVE.xhr.udpSendMoreReliable(JSON.stringify([
+					2, 1
 			]));
 		}));
 
@@ -883,12 +870,11 @@ exports = Class(GC.Application, function () {
 
 			GC.app.sfx.play('sfx_cannon_b');
 		} else if (obj[0] == 2) {
-			FAKE_LOSS = obj[1];
-			logger.log("Fake loss set to", FAKE_LOSS);
-		} else if (obj[0] == 3) {
 			if (obj[1] == 1) {
+				this.UseMoreReliable = true;
 				logger.log("Erasure codes toggled ON");
 			} else {
+				this.UseMoreReliable = false;
 				logger.log("Erasure codes toggled off");
 			}
 		}
