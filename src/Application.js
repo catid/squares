@@ -15,8 +15,9 @@ var UI_HEIGHT = 1024,
 
 var BG_WIDTH = 576,
 	BG_HEIGHT = 1024,
-	Z_BOMBS = 30,
-	Z_DUDES = 20,
+	Z_BOMBS = 300,
+	Z_DUDES = 50,
+	Z_COUNT = 5000,
 	BOMB_SIZE = 10,
 	DUDE_SIZE = 60,
 	DRAG_THRESH = 60,
@@ -31,7 +32,8 @@ var BG_WIDTH = 576,
 	TEXT_WIDTH = 64,
 	TEXT_HEIGHT = 80,
 	PROTECTION_TICKS = 300,
-	ACTIVITY_TIMEOUT = 1000;
+	ACTIVITY_TIMEOUT = 1000,
+	EVENT_CUTOFF = 1500; // Ignore older than this
 
 exports = Class(GC.Application, function () {
 	this.music = new Sound({
@@ -600,9 +602,9 @@ exports = Class(GC.Application, function () {
 			logger.log("Ploss10");
 			NATIVE.xhr && NATIVE.xhr.udpSend("CMD PLOSS " + 10, true);
 		}));
-		this.optionsOverlay.on('ploss20', bind(this, function() {
-			logger.log("Ploss20");
-			NATIVE.xhr && NATIVE.xhr.udpSend("CMD PLOSS " + 20, true);
+		this.optionsOverlay.on('ploss5', bind(this, function() {
+			logger.log("Ploss5");
+			NATIVE.xhr && NATIVE.xhr.udpSend("CMD PLOSS " + 5, true);
 		}));
 		this.optionsOverlay.on('plossOff', bind(this, function() {
 			logger.log("PlossOff");
@@ -706,7 +708,8 @@ exports = Class(GC.Application, function () {
 			characterData: YELLOW_ORANGE_TEXT,
 			spacing: -6,
 			canHandleEvents: false,
-			visible: false
+			visible: false,
+			zIndex: 5000
 		});
 
 		this.touchHistory = [];
@@ -754,8 +757,9 @@ exports = Class(GC.Application, function () {
 		};
 
 		this.me = this.getDudeView(this.netSim);
-		this.me.updateLives();
 		this.me.addStar();
+		this.me.zIndex = Z_DUDES - 1;
+		this.me.updateLives();
 
 		this.dudes.push(this.me);
 		this.dudesByIdent[this.myIdent] = this.me;
@@ -778,6 +782,11 @@ exports = Class(GC.Application, function () {
 	}
 
 	this.onServerData = function(obj, dt, ts) {
+		if (dt > EVENT_CUTOFF) {
+			//logger.log("TOO OLD", ts, sim.ts);
+			return;
+		}
+
 		if (obj[0] == 1) {
 			var ident = obj[1];
 			var color = obj[2];
@@ -813,7 +822,7 @@ exports = Class(GC.Application, function () {
 			var sim = dude.sim;
 
 			if (ts - sim.ts < -1) {
-				logger.log("OUT OF ORDER", ts, sim.ts);
+				//logger.log("OUT OF ORDER", ts, sim.ts);
 				return;
 			}
 
@@ -854,9 +863,7 @@ exports = Class(GC.Application, function () {
 				this.dtlog.length = 0;
 			}
 */
-			if (dt < 2000) {
-				this.tickDude(dude, dt + 2); // Add 2 ms for JS processing
-			}
+			this.tickDude(dude, dt + 2); // Add 2 ms for JS processing
 		} else if (obj[0] == 0) {
 			var view = this.getBombView({
 				x: obj[2],
@@ -869,9 +876,7 @@ exports = Class(GC.Application, function () {
 
 			this.bombs.push(view);
 
-			if (dt < 2000) {
-				this.tickBomb(view, dt + 2);
-			}
+			this.tickBomb(view, dt + 2);
 
 			GC.app.sfx.play('sfx_cannon_b');
 		} else if (obj[0] == 2) {

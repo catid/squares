@@ -78,25 +78,25 @@ exports = Class(View, function (supr) {
 			clip: false
 		});
 
-		this._Ploss10Button = this.makeButton({
+		this._Ploss5Button = this.makeButton({
 			width: 340,
 			height: 95,
 			x: (this._container.style.width - 340) * 0.5,
 			y: 100,
-			title: "10% Packet Loss On",
+			title: "5% Packet Loss On",
 			onPress: bind(this, function() {
-				this.emit('ploss10');
+				this.emit('ploss5');
 			})
 		});
 
-		this._Ploss20Button = this.makeButton({
+		this._Ploss10Button = this.makeButton({
 			width: 340,
 			height: 95,
 			x: (this._container.style.width - 340) * 0.5,
 			y: 200,
-			title: "20% Packet Loss On",
+			title: "10% Packet Loss On",
 			onPress: bind(this, function() {
-				this.emit('ploss20');
+				this.emit('ploss10');
 			})
 		});
 

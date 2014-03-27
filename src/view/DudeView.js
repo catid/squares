@@ -41,7 +41,8 @@ exports = Class(View, function(supr)
 			textAlign: 'center',
 			characterData: YELLOW_ORANGE_TEXT,
 			spacing: -6,
-			canHandleEvents: false
+			canHandleEvents: false,
+			zIndex: 200
 		});
 	};
 
@@ -52,19 +53,22 @@ exports = Class(View, function(supr)
 			this.oldLives = this.sim.lives;
 			this.livesText.setText(this.sim.lives);
 		}
+		if (this.starView) {
+			this.starView.style.x = this.style.width / 2 - STAR_WIDTH/2;
+			this.starView.style.y = this.style.height / 2 - STAR_HEIGHT/2;
+		}
 	}
 
 	this.addStar = function() {
 		this.starView = new ImageView({
-			parent: this.livesText,
-			x: TEXT_WIDTH - 4,
-			y: TEXT_HEIGHT - 4,
-			anchorX: 0,
-			anchorY: 0,
-			width: STAR_WIDTH / 2,
-			height: STAR_HEIGHT / 2,
+			parent: this,
+			x: this.style.width/2 - STAR_WIDTH/2,
+			y: this.style.height/2 - STAR_HEIGHT/2,
+			width: STAR_WIDTH,
+			height: STAR_HEIGHT,
 			image: "resources/images/icon_star.png",
-			canHandleEvents: false
+			canHandleEvents: false,
+			zIndex: 100
 		});
 	}
 });
